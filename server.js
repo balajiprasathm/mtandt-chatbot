@@ -4,13 +4,13 @@
 import express from "express";
 import cors from "cors";
 import fs from "fs";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from environment
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const LEADS_FILE = "./leads.json";
 const LEADS_WEBHOOK_URL = process.env.LEADS_WEBHOOK_URL || ""; // optional: Zapier/Make/Sheets webhook
 
@@ -96,23 +96,22 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "message is required" });
     }
 
-    const messages = [
-      ...history.slice(-10), // keep last 10 turns to limit token usage
-      { role: "user", content: message },
+    // Gemini expects history as {role, parts:[{text}]}; "assistant" becomes "model"
+    const contents = [
+      ...history.slice(-10).map((turn) => ({
+        role: turn.role === "assistant" ? "model" : "user",
+        parts: [{ text: turn.content }],
+      })),
+      { role: "user", parts: [{ text: message }] },
     ];
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 500,
-      system: SYSTEM_PROMPT,
-      messages,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: { systemInstruction: SYSTEM_PROMPT, maxOutputTokens: 500 },
     });
 
-    const reply = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
+    const reply = response.text || "";
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err);
