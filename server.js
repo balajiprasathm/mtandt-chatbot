@@ -128,24 +128,20 @@ Rules:
 COMPANY KNOWLEDGE:
 ${COMPANY_KNOWLEDGE}`;
 
-// Decide which product image/table to show by reading the AI's OWN answer text.
-// This is far more reliable than matching the visitor's question, because the visitor
-// might phrase things any number of ways ("cherry picker", "aerial platform", typos...),
-// but the AI's answer will almost always use the correct product term from the
-// knowledge base ("boom lift", "scissor lift", "spider lift") since that's what it was
-// given to work with.
-function detectMediaTag(userMessage, replyText) {
-  const combined = (replyText + " " + userMessage).toLowerCase();
+// Decide which product image/table to show, based ONLY on the visitor's current question
+// (not the AI's reply — checking the reply caused false positives when earlier conversation
+// context made the AI mention a product in passing while answering an unrelated question).
+// Covers common synonyms so paraphrased questions still match reasonably well.
+function detectMediaTag(userMessage) {
+  const text = userMessage.toLowerCase();
   let category = null;
-  if (/\bboom\s*lifts?\b/.test(combined)) category = "boom_lift";
-  else if (/\bscissor\s*lifts?\b/.test(combined)) category = "scissor_lift";
-  else if (/\bspider\s*lifts?\b/.test(combined)) category = "spider_lift";
+  if (/\b(boom\s*lifts?|cherry\s*pickers?|articulat\w*\s*lifts?)\b/.test(text)) category = "boom_lift";
+  else if (/\bscissor\s*lifts?\b/.test(text)) category = "scissor_lift";
+  else if (/\b(spider\s*lifts?|crawler\s*lifts?|track[- ]mounted\s*lifts?)\b/.test(text)) category = "spider_lift";
 
   if (!category) return "";
 
-  const wantsList = /\b(what|which|show|list|all|models|options|available|do you have)\b/.test(
-    userMessage.toLowerCase()
-  );
+  const wantsList = /\b(what|which|show|list|all|models|options|available|do you have)\b/.test(text);
   return wantsList ? `\n[SHOW_TABLE:${category}]` : `\n[SHOW_IMAGE:${category}]`;
 }
 
@@ -170,7 +166,7 @@ app.post("/chat", async (req, res) => {
     });
 
     const replyText = completion.choices[0]?.message?.content || "";
-    const reply = replyText + detectMediaTag(message, replyText);
+    const reply = replyText + detectMediaTag(message);
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err);
