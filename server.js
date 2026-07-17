@@ -4,13 +4,13 @@
 import express from "express";
 import cors from "cors";
 import fs from "fs";
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const LEADS_FILE = "./leads.json";
 const LEADS_WEBHOOK_URL = process.env.LEADS_WEBHOOK_URL || ""; // optional: Zapier/Make/Sheets webhook
 
@@ -144,22 +144,20 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "message is required" });
     }
 
-    // Gemini expects history as {role, parts:[{text}]}; "assistant" becomes "model"
-    const contents = [
-      ...history.slice(-10).map((turn) => ({
-        role: turn.role === "assistant" ? "model" : "user",
-        parts: [{ text: turn.content }],
-      })),
-      { role: "user", parts: [{ text: message }] },
+    // Groq uses OpenAI-style messages: {role: "system"|"user"|"assistant", content}
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...history.slice(-10),
+      { role: "user", content: message },
     ];
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents,
-      config: { systemInstruction: SYSTEM_PROMPT, maxOutputTokens: 1500 },
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages,
+      max_tokens: 1500,
     });
 
-    const reply = response.text || "";
+    const reply = completion.choices[0]?.message?.content || "";
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err);
