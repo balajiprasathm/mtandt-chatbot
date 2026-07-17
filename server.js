@@ -4,6 +4,8 @@
 import express from "express";
 import cors from "cors";
 import fs from "fs";
+import path from "path";
+import pdfParse from "pdf-parse";
 import Groq from "groq-sdk";
 
 const app = express();
@@ -13,6 +15,7 @@ app.use(express.json());
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const LEADS_FILE = "./leads.json";
 const LEADS_WEBHOOK_URL = process.env.LEADS_WEBHOOK_URL || ""; // optional: Zapier/Make/Sheets webhook
+const KNOWLEDGE_DIR = "./knowledge";
 
 // ---- Company knowledge base -------------------------------------------
 // Edit this freely as products, pricing policy, or contact details change.
@@ -106,6 +109,38 @@ Also present in: Bangalore (Tumkur Road), Sri Lanka (Colombo), and other SAARC l
 Website: https://www.mtandt.com
 `;
 
+// Reads every .txt and .pdf file in ./knowledge and returns their combined text.
+// Drop files in that folder (via GitHub's upload UI) to extend what the bot knows —
+// no code changes needed. Runs once at startup.
+async function loadUploadedKnowledge() {
+  if (!fs.existsSync(KNOWLEDGE_DIR)) return "";
+  const files = fs.readdirSync(KNOWLEDGE_DIR);
+  let combined = "";
+
+  for (const file of files) {
+    const fullPath = path.join(KNOWLEDGE_DIR, file);
+    const ext = path.extname(file).toLowerCase();
+    try {
+      if (ext === ".txt" || ext === ".md") {
+        const text = fs.readFileSync(fullPath, "utf-8");
+        combined += `\n\n--- From uploaded file: ${file} ---\n${text}`;
+      } else if (ext === ".pdf") {
+        const buffer = fs.readFileSync(fullPath);
+        const parsed = await pdfParse(buffer);
+        combined += `\n\n--- From uploaded file: ${file} ---\n${parsed.text}`;
+      }
+    } catch (err) {
+      console.error(`Could not read knowledge file ${file}:`, err.message);
+    }
+  }
+  return combined;
+}
+
+const UPLOADED_KNOWLEDGE = await loadUploadedKnowledge();
+if (UPLOADED_KNOWLEDGE) {
+  console.log(`Loaded uploaded knowledge docs (${UPLOADED_KNOWLEDGE.length} characters)`);
+}
+
 const SYSTEM_PROMPT = `You are the website assistant for Mtandt Group, an industrial access
 equipment and safety solutions company. Answer visitor questions about the company, its
 products/services, business units, and how to buy or rent equipment, using ONLY the
@@ -126,7 +161,8 @@ Rules:
   Write in plain sentences, or use simple numbered lines like "1. Boom Lift" if listing items.
 
 COMPANY KNOWLEDGE:
-${COMPANY_KNOWLEDGE}`;
+${COMPANY_KNOWLEDGE}
+${UPLOADED_KNOWLEDGE}`;
 
 // Decide which product image/table to show, based ONLY on the visitor's current question
 // (not the AI's reply — checking the reply caused false positives when earlier conversation
