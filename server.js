@@ -154,7 +154,7 @@ app.post("/chat", async (req, res) => {
     ];
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents,
       config: { systemInstruction: SYSTEM_PROMPT, maxOutputTokens: 1500 },
     });
