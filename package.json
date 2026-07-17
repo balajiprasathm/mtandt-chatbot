@@ -10,6 +10,7 @@
   "dependencies": {
     "groq-sdk": "^0.9.1",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "pdf-parse": "^1.1.1"
   }
 }
